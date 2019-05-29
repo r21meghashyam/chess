@@ -1,0 +1,538 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Chess</title>
+    <style>
+        table,th,tr {
+            border:1px solid #000;
+            border-collapse: collapse;
+            
+        }
+        th{
+            width:100px;
+            height:100px;
+            background: #999;
+        }
+        
+
+        tr:nth-of-type(odd)>th:nth-of-type(even),tr:nth-of-type(even)>th:nth-of-type(odd){
+            background: #111;
+        }
+        body{
+            margin:0px;
+            background: #555;
+            font-family: fantasy;
+            user-select: none; 
+            display: flex;
+            justify-content: center;
+        }
+        [data-pawn]{
+            background:url('pawns.png');
+            cursor: pointer;
+            width:50px;
+            height:100px;
+            display: inline-block;
+        }
+        [data-color=white]{
+            background-position-y: 0px;
+        }
+        [data-color=black]{
+            background-position-y: 100px;
+        }
+        [data-pawn=soldier]{
+            background-position-x: 0px;
+        }
+        [data-pawn=king]{
+            background-position-x: -50px;
+        }
+        [data-pawn=queen]{
+            background-position-x: -100px;
+        }
+        [data-pawn=bishop]{
+            background-position-x: -150px;
+        }
+        [data-pawn=elephant]{
+            background-position-x: -200px;
+        }
+        [data-pawn=knight]{
+            background-position-x: -250px;
+        }
+        .dialog-bg{
+            position: fixed;
+            top:0px;
+            left:0px;width:100%;
+            display: flex;
+            justify-content: center;
+            height: 100%;
+            background:rgba(0,0,0,0.6);
+            transition: transform 2s;
+        }
+        .dialog{
+            color:#FFF;
+           align-self:center;
+           text-align: center;
+        }
+        .dialog>div{
+            margin: 20px;
+           
+            transform: scale(1.5);
+            transition: transform 0.5s ease-in-out;
+            filter: drop-shadow(0px 0px 20px #111);
+        }
+       
+        .dialog>div:hover{
+            opacity: 1;
+            transform: scale(1.5) translateY(-10px)
+        }
+        .slideUp{
+            transform:  translateY(-1000px);
+        }
+        table{
+            align-self:center;
+        }
+        [data-turn=white] .white{
+            filter: drop-shadow(10px 10px 10px #999);
+        }
+        [data-color=selected]{
+            background:#900!important;
+        }
+        [data-color=active]{
+            background:#009!important;
+        }
+    </style>
+    <script src="jquery.js"></script>
+    <script>
+        $=jQuery;
+        
+        //generateNumArray(4) = [1,2,3,4]
+        const generateNumArray =(i,d)=> '.'.repeat(i-1).split(/./g).map((i,j)=>(d&&d.map(i=>i))||j+1);
+        
+        const toggleColor=(i)=>i=='white'?'black':'white';
+        
+        const CHESSBOARD=generateNumArray(8,generateNumArray(8,[].map(i=>i)).map(i=>i));
+        
+        let $PLAYER=['white','black'];
+
+        const render = () =>{
+                let html = '';
+                CHESSBOARD.map((i,k)=>{
+                    html+='<tr>';
+                    i.map((j,l)=>{
+                        html+='<th data-cell="'+k+'.'+l+'" data-color="'+j[2]+'" >';
+                        if(j[0])
+                            html+='<div data-pawn="'+j[0]+'" data-color="'+j[1]+'"></div>';
+                        html+='</th>';
+                    });
+                    html+='</tr>';
+                });
+                $("table").html(html);
+            }
+        
+       const setcell=(row,col,pawn,color)=>CHESSBOARD[row][col]=[pawn,color];
+        const hasOpponent=(row,col,color)=>{
+            let op = toggleColor(color);
+            if(CHESSBOARD[row][col][1]==op)
+                return true;
+            return false;
+        }
+        const isValid=(row,col,color)=>{
+            if(row<0||row>7)
+                return false;
+            if(col<0||col>7)
+                return false;
+            if(CHESSBOARD[row][col][1]!=color)
+                return true;
+            return false;
+        }
+        const dialog=()=>{
+            $(".dialog [data-pawn]").click(function(){
+            let val = $(this).attr('data-color');
+            if($PLAYER[1]!=val){
+                $PLAYER[1]=val;
+                $PLAYER[0]=toggleColor(val);
+                console.log($PLAYER);
+            }
+            
+            for(let side=0;side<2;side++){//loops two times, once for player[0], then for player[1]
+                /*
+                    mapping the soliders
+                    solider will be placed in row 1 and 6 for all the columns
+                    row 1 for player[0]
+                    row 6 for player[1]
+                */
+
+                for(i=0;i<8;i++){//lopping from col 0 to 7
+                    let rowno= side==0?1:6;
+                    /*
+                        if the side is 0, ie player[0]
+                        rowno is 1 to indicate top soilders
+                        if the side is 1, ie player[1]
+                        rowno is 6 to indicate bottom soilders
+                            0   1   2   3   4   5   6   7
+                            _________________________________
+                            0	 |   |   |   |   |   |   |   |   |
+                            |___|___|___|___|___|___|___|___|
+                            1	 | s | s | s | s | s | s | s | s |
+                            |___|___|___|___|___|___|___|___|
+                            2	 |   |   |   |   |   |   |   |   |
+                            |___|___|___|___|___|___|___|___|
+                            3	 |   |   |   |   |   |   |   |   |
+                            |___|___|___|___|___|___|___|___|
+                            4	 |   |   |   |   |   |   |   |   |
+                            |___|___|___|___|___|___|___|___|
+                            5	 |   |   |   |   |   |   |   |   |
+                            |___|___|___|___|___|___|___|___|
+                            6	 | s | s | s | s | s | s | s | s |
+                            |___|___|___|___|___|___|___|___|
+                            7	 |   |   |   |   |   |   |   |   |
+                            |___|___|___|___|___|___|___|___|
+                    */
+
+                    setcell(rowno,i,'solider',$PLAYER[side]);
+                    /*
+                    call setcell to map the pawn
+                        row:rowno,
+                        column:i
+                        'S' as pawn for solider
+                        player[side] gives the color
+                    */
+                }
+                let rowno = side==0?0:7;
+                /*
+                mapping the remaining pawns, i.e the elephant, knight, bishop
+                king and queen will be mapped outside the loop
+
+                the pawn is placed two at a time, since each pawn comes two
+                times, once in the left and once in the right
+                i=0 will set the left side pawns
+                i=1 will set the right side pawns
+                the rowno will take care of the row of the pawns,
+                when side is 0, row will be 0(top row)
+                when side is 1, row will be 7(bottom row)
+                */
+                for(i=0;i<2;i++){
+                    /*
+                    Draw the bishop in cols 2 and 5
+                    0   1   2   3   4   5   6   7
+                    _________________________________
+                0	 |   |   | b |   |   | b |   |   |
+                    |___|___|___|___|___|___|___|___|
+                1	 | s | s | s | s | s | s | s | s |
+                    |___|___|___|___|___|___|___|___|
+                2	 |   |   |   |   |   |   |   |   |
+                    |___|___|___|___|___|___|___|___|
+                3	 |   |   |   |   |   |   |   |   |
+                    |___|___|___|___|___|___|___|___|
+                4	 |   |   |   |   |   |   |   |   |
+                    |___|___|___|___|___|___|___|___|
+                5	 |   |   |   |   |   |   |   |   |
+                    |___|___|___|___|___|___|___|___|
+                6	 | s | s | s | s | s | s | s | s |
+                    |___|___|___|___|___|___|___|___|
+                7	 |   |   | b |   |   | b |   |   |
+                    |___|___|___|___|___|___|___|___|
+
+                    */
+                    setcell(rowno,i==0?7-2:2,'bishop',$PLAYER[side]);
+                    //knight
+                    setcell(rowno,i==0?7-1:1,'knight',$PLAYER[side]);
+                    //Elephant
+                    setcell(rowno,i==0?7-0:0,'elephant',$PLAYER[side]);
+
+                }
+            }
+            if($PLAYER[1]=='black'){
+                setcell(0,4,'queen','white');
+                setcell(0,3,'king','white');
+                setcell(7,4,'queen','black');
+                setcell(7,3,'king','black');
+            }
+            else{
+                setcell(0,4,'king','black');
+                setcell(0,3,'queen','black');
+                setcell(7,4,'king','white');
+                setcell(7,3,'queen','white');
+
+            }
+            render();
+            $(".dialog-bg").addClass("slideUp");
+          
+        });
+        }
+
+        const colorcell=(row,col,color)=>{
+            console.log(row,col,color);
+            let d = CHESSBOARD[row][col].map(i=>i);
+            d[2]=color;
+            //console.log(row,col,d,CHESSBOARD);
+            CHESSBOARD[row][col]=d;
+        }
+
+        const activate=(pawn_row,pawn_col,turn)=>{
+            if(isValid(pawn_row,pawn_col,turn)){
+                colorcell(pawn_row,pawn_col,'active');
+                if(hasOpponent(pawn_row,pawn_col,turn))
+                    return false;
+                return true;
+            }
+            return false;
+        }
+
+        $(document).ready(()=>{
+            render();
+            dialog();
+
+        $(".chessboard").on("click","[data-cell]",function(){
+           
+            let mode = $('.chessboard').attr('data-mode');
+            if(mode=='selected'){
+                $(".chessboard").removeAttr('data-mode');
+                
+                $("[data-color=selected]").each((i,e)=>{
+                    let loc = e.getAttribute('data-cell').split('.');
+                    let pawn_row = Number(loc[0]);
+                    let pawn_col = Number(loc[1]);
+                    let pawn_type = CHESSBOARD[pawn_row][pawn_col][0];
+                    let pawn_color = CHESSBOARD[pawn_row][pawn_col][1];
+                    colorcell(pawn_row,pawn_col,null);
+                    
+                    loc = $(this).attr('data-cell').split('.');
+                    cell_row = Number(loc[0]);
+                    cell_col = Number(loc[1]);
+                    let cell_color = CHESSBOARD[cell_row][cell_col][2];
+                
+                    if(cell_color=='active'){
+                        setcell(cell_row,cell_col,pawn_type,pawn_color);
+                        setcell(pawn_row,pawn_col,null,null);
+                        let turn = $('.chessboard').attr('data-turn');
+                        let row = $PLAYER[0]==turn?7:0;
+                        console.log('D',cell_row,row,pawn_type);
+                        if(cell_row==row&&pawn_type=='solider'){
+                            setcell(cell_row,cell_col,'queen',pawn_color);
+                            console.log('pass');    
+                        }
+                        
+                        let op = toggleColor(turn);
+                        $('.chessboard').attr('data-turn',op);
+                    }
+
+                });
+                
+                $("[data-color=active]").each((i,e)=>{
+                   //console.log(e);
+                    let loc = e.getAttribute('data-cell').split('.');
+                    let pawn_row = Number(loc[0]);
+                    let pawn_col = Number(loc[1]);
+
+
+                    colorcell(pawn_row,pawn_col,null);
+                });
+
+                
+
+               
+
+                render();
+                //TODO: MOVE TO LOCATION IF VALID LOCATION
+            }
+            else{
+                let pawn = $(this).children("div");
+                if(!pawn)
+                    return;
+                
+                let turn = $('.chessboard').attr('data-turn');
+                let pawncolor = pawn.attr("data-color");
+                if(turn!=pawncolor)
+                    return;
+                let pawntype = pawn.attr("data-pawn");
+                
+                let loc = $(this).attr('data-cell').split('.');
+                let pawn_row = Number(loc[0]);
+                let pawn_col = Number(loc[1]);
+
+                //$(this).parent().attr("data-selected","true");
+                colorcell(pawn_row,pawn_col,'selected');
+                $('.chessboard').attr("data-mode","selected");
+
+                
+                
+
+
+
+                let op = toggleColor(turn);
+                
+                
+                switch(pawntype){
+                    case 'solider':
+                        {
+                        let row = $PLAYER[0]==turn?1:6;
+                        let dir = $PLAYER[0]==turn?1:-1;
+                       
+                        if(pawn_row==row){
+                            
+                            if(isValid(pawn_row+dir,pawn_col,turn)&&isValid(pawn_row+(2*dir),pawn_col,turn)&&!hasOpponent(pawn_row+(2*dir),pawn_col,turn))
+                                colorcell(pawn_row+(2*dir),pawn_col,'active'); 
+                        }
+                        if(isValid(pawn_row+dir,pawn_col,turn)&&!hasOpponent(pawn_row+dir,pawn_col,turn))
+                            colorcell(pawn_row+dir,pawn_col,'active');
+                        if(isValid(pawn_row+(dir*1),pawn_col-1,turn)&&hasOpponent(pawn_row+(dir*1),pawn_col-1,turn))
+                            colorcell(pawn_row+(dir*1),pawn_col-1,'active');
+                        if(isValid(pawn_row+(dir*1),pawn_col+1,turn)&&hasOpponent(pawn_row+(dir*1),pawn_col+1,turn))
+                            colorcell(pawn_row+(dir*1),pawn_col+1,'active');
+                        }
+					break;
+                    case 'knight':
+                        activate(pawn_row+2,pawn_col+1,turn);
+                        activate(pawn_row-2,pawn_col+1,turn);
+                        activate(pawn_row-2,pawn_col-1,turn);
+                        activate(pawn_row+2,pawn_col-1,turn);
+                        activate(pawn_row+1,pawn_col+2,turn);
+                        activate(pawn_row-1,pawn_col+2,turn);
+                        activate(pawn_row-1,pawn_col-2,turn);
+                        activate(pawn_row+1,pawn_col-2,turn);
+                    break;
+                    case 'elephant':
+                        console.log('G',pawn_row,pawn_col);
+                        //down
+                        for(i=pawn_row+1;i<8;i++)
+                            if(!activate(i,pawn_col,turn))
+                                break;
+                        //up
+                        for(i=pawn_row-1;i>=0;i--)
+                            if(!activate(i,pawn_col,turn))
+                                    break;
+                        //left
+                        for(i=pawn_col-1;i>=0;i--){
+                            if(!activate(pawn_row,i,turn))
+                                    break;
+                            console.log('E',pawn_row,i);
+                        }
+                        //right
+                        for(i=pawn_col+1;i<8;i++)
+                            if(!activate(pawn_row,i,turn))
+                                        break;
+                        
+                    break;
+                    case 'bishop':
+                        
+                        //bottom-right
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row+i,pawn_col+i,turn))
+                                break;
+                        //bottom-left
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row+i,pawn_col-i,turn))
+                                    break;
+                        //top right
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row-i,pawn_col+i,turn))
+                                    break;
+                           
+                        
+                        //top left
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row-i,pawn_col-i,turn))
+                                        break;
+                        console.log('F');
+                    break;
+                    case 'queen':
+                        
+                        //bottom-right
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row+i,pawn_col+i,turn))
+                                break;
+                        //bottom-left
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row+i,pawn_col-i,turn))
+                                    break;
+                        //top right
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row-i,pawn_col+i,turn))
+                                    break;
+                           
+                        
+                        //top left
+                        for(i=1;i<8;i++)
+                            if(!activate(pawn_row-i,pawn_col-i,turn))
+                                        break;
+                        //down
+                        for(i=pawn_row+1;i<8;i++)
+                            if(!activate(i,pawn_col,turn))
+                                break;
+                        //up
+                        for(i=pawn_row-1;i>=0;i--)
+                            if(!activate(i,pawn_col,turn))
+                                    break;
+                        //left
+                        for(i=pawn_col-1;i>=0;i--){
+                            if(!activate(pawn_row,i,turn))
+                                    break;
+                            console.log('E',pawn_row,i);
+                        }
+                        //right
+                        for(i=pawn_col+1;i<8;i++)
+                            if(!activate(pawn_row,i,turn))
+                                        break;
+                    break;
+                    case 'king':
+                     {
+                        let row = $PLAYER[0]==turn?0:7;
+                        
+                        let dir = $PLAYER[0]==turn?1:-1;
+                       
+                        if(pawn_row==row&&pawn_col==4){//CASTLING
+                            
+                            if(isValid(pawn_row,pawn_col+1,turn)&&isValid(pawn_row,pawn_col+2,turn)&&!hasOpponent(pawn_row,pawn_col+1,turn)&&!hasOpponent(pawn_row,pawn_col+2,turn)&&CHESSBOARD[pawn_row][7][0]=='elephant'&&CHESSBOARD[pawn_row][7][0]==turn)
+                                colorcell(pawn_row,pawn_col+2,'active'); 
+                        }
+                        activate(pawn_row-1,pawn_col-1,turn);
+                        activate(pawn_row-1,pawn_col,turn);
+                        activate(pawn_row-1,pawn_col+1,turn);
+                        activate(pawn_row,pawn_col-1,turn);
+                        activate(pawn_row,pawn_col+1,turn);
+                        activate(pawn_row+1,pawn_col-1,turn);
+                        activate(pawn_row+1,pawn_col,turn);
+                        activate(pawn_row+1,pawn_col+1,turn);
+
+                    }
+                        
+					break;
+                }
+                render();
+            }
+            
+        })
+        })
+       
+       
+    </script>
+</head>
+<body>
+    <table class="chessboard" data-turn="white"></table>
+   <div class="dialog-bg">
+        <div class="dialog">
+                <h1>Select your side</h1>
+                <div data-pawn="king" data-color="white"></div>
+                <div data-pawn="king" data-color="black"></div>
+           </div>
+   </div>
+   
+        
+<script>
+/**
+ * Main Menu
+ * 1. Player vs Player
+ * 2. Player vs Computer
+ * 3. Player vs online player
+ * 4. Player vs Friend
+ * 
+ * -turn of highlight
+ * 
+*/
+</script>  
+   
+</body>
+</html
+
